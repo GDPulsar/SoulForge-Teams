@@ -571,7 +571,11 @@ public class SoulForgeTeams implements ModInitializer {
 			return this.memberNames.get(getOwnerUUID());
 		}
 
-		public void setOwner(PlayerEntity newOwner) {
+		public Options getOptions() {
+			return this.options;
+		}
+
+		private void setOwner(PlayerEntity newOwner) {
 			this.members.put(ownerUUID, Rank.LEADER);
 			this.ownerUUID = newOwner.getUuid();
 		}
