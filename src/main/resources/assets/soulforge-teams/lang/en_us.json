@@ -25,5 +25,6 @@
   "soulforge-teams.team_members": "Team Members: ",
   "soulforge-teams.no_invites": "You don't have any invites from ",
   "soulforge-teams.health_prefix": "Health: ",
-  "soulforge-teams.successfully_changed_options": "Successfully changed options."
+  "soulforge-teams.successfully_changed_options": "Successfully changed options.",
+  "soulforge-teams.cant_leave_as_owner": "You cannot leave a team that you are the owner of!"
 }

@@ -40,4 +40,18 @@ public class SoulForgeTeamsData extends PersistentState {
         teamData.markDirty();
         return teamData;
     }
+
+    public static SoulForgeTeamsData getData(MinecraftServer server) {
+        if (server != null) {
+            PersistentStateManager persistentStateManager = server.getWorld(World.OVERWORLD).getPersistentStateManager();
+
+            SoulForgeTeamsData teamData = persistentStateManager.getOrCreate(SoulForgeTeamsData::createFromNbt, SoulForgeTeamsData::new, "soulforge-teams");
+            teamData.markDirty();
+            return teamData;
+        } else {
+            SoulForgeTeamsData teamData = new SoulForgeTeamsData();
+            teamData.TEAMS.addAll(SoulForgeTeamsClient.TEAMS);
+            return teamData;
+        }
+    }
 }

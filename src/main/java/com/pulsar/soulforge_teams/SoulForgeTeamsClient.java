@@ -79,7 +79,7 @@ public class SoulForgeTeamsClient implements ClientModInitializer {
                         }
                     }
                     scrollTimer++;
-                    context.enableScissor(0, (screenHeight - widgetHeight)/2, 100, (screenHeight + widgetHeight)/2);
+                    context.enableScissor(0, (screenHeight - widgetHeight)/2, 150, (screenHeight + widgetHeight)/2);
                     for (int i = 0; i < memberNum; i++) {
                         int drawPosition = -scrollAmount + 30 * i;
                         UUID memberUUID = onlineMembers.get(i);
@@ -90,7 +90,7 @@ public class SoulForgeTeamsClient implements ClientModInitializer {
                         context.drawText(MinecraftClient.getInstance().textRenderer, getPlayerInTeamName(memberUUID), 40, nameTextTop, 0xFFFFFF, true);
                         DecimalFormat df = new DecimalFormat();
                         df.setMaximumFractionDigits(1);
-                        context.drawText(MinecraftClient.getInstance().textRenderer, Text.translatable("soulforge-teams.health_prefix").append(df.format(getPlayerHealth(memberUUID))), 40, healthTextTop, 0xFFFFFF, true);
+                        context.drawText(MinecraftClient.getInstance().textRenderer, Text.translatable("soulforge-teams.health_prefix").append(df.format(getPlayerHealth(memberUUID))).append("/").append(df.format(getPlayerMaxHealth(memberUUID))), 40, healthTextTop, 0xFFFFFF, true);
                         //context.fill(40, healthTextTop, 90, healthTextTop + 4, 0xAA0000);
                         //context.fill(40, healthBarTop, 40 + (int)(50 * (getPlayerHealth(memberUUID) / getPlayerMaxHealth(memberUUID))), healthBarTop + 4, 0xFF0000);
                     }
@@ -125,7 +125,7 @@ public class SoulForgeTeamsClient implements ClientModInitializer {
     }
 
     public static SoulForgeTeams.Team getPlayerTeam(PlayerEntity player) {
-        for (SoulForgeTeams.Team team : TEAMS) {
+        for (SoulForgeTeams.Team team : List.copyOf(TEAMS)) {
             if (team.isTeamMember(player)) {
                 return team;
             }
@@ -134,7 +134,7 @@ public class SoulForgeTeamsClient implements ClientModInitializer {
     }
 
     public static SoulForgeTeams.Team getPlayerTeam(UUID uuid) {
-        for (SoulForgeTeams.Team team : TEAMS) {
+        for (SoulForgeTeams.Team team : List.copyOf(TEAMS)) {
             if (team.isTeamMember(uuid)) {
                 return team;
             }
@@ -143,7 +143,7 @@ public class SoulForgeTeamsClient implements ClientModInitializer {
     }
 
     public static Text getPlayerInTeamName(UUID uuid) {
-        for (SoulForgeTeams.Team team : TEAMS) {
+        for (SoulForgeTeams.Team team : List.copyOf(TEAMS)) {
             if (team.isTeamMember(uuid)) {
                 return Text.literal(team.getMemberName(uuid));
             }

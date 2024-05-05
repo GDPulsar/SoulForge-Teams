@@ -74,6 +74,7 @@ public class SoulForgeTeams implements ModInitializer {
 			for (ServerPlayerEntity player : server.getPlayerManager().getPlayerList()) {
 				ServerPlayNetworking.send(player, HEALTH_PACKET, buf);
 			}
+			syncTeams(server);
 		});
 	}
 
@@ -339,6 +340,28 @@ public class SoulForgeTeams implements ModInitializer {
 											return 1;
 										})
 								)
+						)
+						.then(literal("leave")
+									.executes(context -> {
+										ServerPlayerEntity player = context.getSource().getPlayer();
+										MinecraftServer server = context.getSource().getServer();
+										if (player != null && server != null) {
+											if (isInTeam(server, player)) {
+												Team team = getPlayerTeam(server, player);
+												if (team != null) {
+													Team.Rank rank = team.members.get(player.getUuid());
+													if (rank != Team.Rank.OWNER) {
+														player.sendMessage(Text.translatable("soulforge-teams.cant_leave_as_owner"));
+														return 1;
+													}
+													team.kickMember(player);
+												}
+											} else {
+												player.sendMessage(Text.translatable("soulforge-teams.not_in_team"));
+											}
+										}
+										return 1;
+									})
 						)
 						.then(literal("declare")
 								.then(argument("team", string())
@@ -859,7 +882,7 @@ public class SoulForgeTeams implements ModInitializer {
 			}
 
 			public Text getText() {
-				return switch (index) {
+				return switch (this.getIndex()) {
 					case 2 -> Text.translatable("soulforge-teams.ally");
 					case 1 -> Text.translatable("soulforge-teams.neutral");
 					case 0 -> Text.translatable("soulforge-teams.enemy");
