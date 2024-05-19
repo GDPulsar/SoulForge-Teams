@@ -104,6 +104,18 @@ public class SoulForgeTeams implements ModInitializer {
 		syncTeams(server);
 	}
 
+	public static void deleteTeam(MinecraftServer server, Team team) {
+		SoulForgeTeamsData teamData = SoulForgeTeamsData.getServerState(server);
+		for (Team other : List.copyOf(teamData.TEAMS)) {
+			other.declare(team, Team.Relation.NEUTRAL);
+		}
+		for (UUID uuid : team.getMemberUUIDS()) {
+			team.kickMember(uuid);
+		}
+		teamData.TEAMS.remove(team);
+		syncTeams(server);
+	}
+
 	public static void addPlayerToTeam(MinecraftServer server, UUID teamId, PlayerEntity player) {
 		SoulForgeTeamsData teamData = SoulForgeTeamsData.getServerState(server);
 		for (Team team : teamData.TEAMS) {
@@ -362,6 +374,21 @@ public class SoulForgeTeams implements ModInitializer {
 										}
 										return 1;
 									})
+						)
+						.then(literal("disband")
+								.executes(context -> {
+									ServerPlayerEntity player = context.getSource().getPlayer();
+									MinecraftServer server = context.getSource().getServer();
+									Team team = getPlayerTeam(server, player);
+									if (player != null && server != null) {
+										if (team != null) {
+											deleteTeam(server, team);
+										} else {
+											player.sendMessage(Text.translatable("soulforge-teams.not_in_team"));
+										}
+									}
+									return 1;
+								})
 						)
 						.then(literal("declare")
 								.then(argument("team", string())
@@ -661,6 +688,16 @@ public class SoulForgeTeams implements ModInitializer {
 			}
         }
 
+		public TeamChanges kickMember(UUID uuid) {
+			if (members.containsKey(uuid)) {
+				members.remove(uuid);
+				memberNames.remove(uuid);
+				return TeamChanges.kicked("Username not known.");
+			} else {
+				return TeamChanges.failed("The specified player is not a part of the team!");
+			}
+		}
+
 		public TeamChanges addMember(PlayerEntity member) {
 			UUID uuid = member.getUuid();
 			if (!members.containsKey(uuid)) {
@@ -688,7 +725,11 @@ public class SoulForgeTeams implements ModInitializer {
 		}
 
 		public TeamChanges declare(Team team, Relation relation) {
-			this.relations.put(team.getID(), relation);
+			if (relation == Relation.NEUTRAL) {
+				this.relations.remove(team.getID());
+			} else {
+				this.relations.put(team.getID(), relation);
+			}
 			return TeamChanges.declaration(team, relation);
 		}
 

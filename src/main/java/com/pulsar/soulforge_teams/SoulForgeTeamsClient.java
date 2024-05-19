@@ -125,27 +125,33 @@ public class SoulForgeTeamsClient implements ClientModInitializer {
     }
 
     public static SoulForgeTeams.Team getPlayerTeam(PlayerEntity player) {
-        for (SoulForgeTeams.Team team : List.copyOf(TEAMS)) {
-            if (team.isTeamMember(player)) {
-                return team;
+        if (TEAMS != null) {
+            for (SoulForgeTeams.Team team : List.copyOf(TEAMS)) {
+                if (team.isTeamMember(player)) {
+                    return team;
+                }
             }
         }
         return null;
     }
 
     public static SoulForgeTeams.Team getPlayerTeam(UUID uuid) {
-        for (SoulForgeTeams.Team team : List.copyOf(TEAMS)) {
-            if (team.isTeamMember(uuid)) {
-                return team;
+        if (TEAMS != null) {
+            for (SoulForgeTeams.Team team : List.copyOf(TEAMS)) {
+                if (team.isTeamMember(uuid)) {
+                    return team;
+                }
             }
         }
         return null;
     }
 
     public static Text getPlayerInTeamName(UUID uuid) {
-        for (SoulForgeTeams.Team team : List.copyOf(TEAMS)) {
-            if (team.isTeamMember(uuid)) {
-                return Text.literal(team.getMemberName(uuid));
+        if (TEAMS != null) {
+            for (SoulForgeTeams.Team team : List.copyOf(TEAMS)) {
+                if (team.isTeamMember(uuid)) {
+                    return Text.literal(team.getMemberName(uuid));
+                }
             }
         }
         return Text.translatable("soulforge-teams.error");
