@@ -1,7 +1,7 @@
 {
 	"schemaVersion": 1,
 	"id": "soulforge-teams",
-	"version": "1.0.3",
+	"version": "1.0.4",
 	"name": "SoulForge Teams",
 	"description": "This is an addon for SoulForge that adds player teams!",
 	"authors": [

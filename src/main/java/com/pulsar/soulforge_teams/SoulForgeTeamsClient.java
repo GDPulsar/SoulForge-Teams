@@ -126,10 +126,14 @@ public class SoulForgeTeamsClient implements ClientModInitializer {
 
     public static SoulForgeTeams.Team getPlayerTeam(PlayerEntity player) {
         if (TEAMS != null) {
-            for (SoulForgeTeams.Team team : List.copyOf(TEAMS)) {
-                if (team.isTeamMember(player)) {
-                    return team;
+            try {
+                for (SoulForgeTeams.Team team : List.copyOf(TEAMS)) {
+                    if (team.isTeamMember(player)) {
+                        return team;
+                    }
                 }
+            } catch (Exception exception) {
+                return null;
             }
         }
         return null;
@@ -137,10 +141,14 @@ public class SoulForgeTeamsClient implements ClientModInitializer {
 
     public static SoulForgeTeams.Team getPlayerTeam(UUID uuid) {
         if (TEAMS != null) {
-            for (SoulForgeTeams.Team team : List.copyOf(TEAMS)) {
-                if (team.isTeamMember(uuid)) {
-                    return team;
+            try {
+                for (SoulForgeTeams.Team team : List.copyOf(TEAMS)) {
+                    if (team.isTeamMember(uuid)) {
+                        return team;
+                    }
                 }
+            } catch (Exception exception) {
+                return null;
             }
         }
         return null;
@@ -148,10 +156,14 @@ public class SoulForgeTeamsClient implements ClientModInitializer {
 
     public static Text getPlayerInTeamName(UUID uuid) {
         if (TEAMS != null) {
-            for (SoulForgeTeams.Team team : List.copyOf(TEAMS)) {
-                if (team.isTeamMember(uuid)) {
-                    return Text.literal(team.getMemberName(uuid));
+            try {
+                for (SoulForgeTeams.Team team : List.copyOf(TEAMS)) {
+                    if (team.isTeamMember(uuid)) {
+                        return Text.literal(team.getMemberName(uuid));
+                    }
                 }
+            } catch (Exception exception) {
+                return Text.translatable("soulforge-teams.error");
             }
         }
         return Text.translatable("soulforge-teams.error");
