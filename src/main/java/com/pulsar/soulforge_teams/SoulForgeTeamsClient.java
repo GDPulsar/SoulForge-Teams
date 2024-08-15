@@ -5,7 +5,6 @@ import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 import net.fabricmc.fabric.api.client.rendering.v1.HudRenderCallback;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.entity.player.PlayerEntity;
-import net.minecraft.server.MinecraftServer;
 import net.minecraft.text.Text;
 import net.minecraft.util.Identifier;
 import net.minecraft.util.Pair;
@@ -50,7 +49,7 @@ public class SoulForgeTeamsClient implements ClientModInitializer {
                 SoulForgeTeams.Team team = getPlayerTeam(player);
                 if (team != null) {
                     int screenHeight = MinecraftClient.getInstance().getWindow().getScaledHeight();
-                    int widgetHeight = 144;
+                    int widgetHeight = (screenHeight / 50) * 30 - 6;
 
                     List<UUID> onlineMembers = new ArrayList<>();
                     for (UUID memberUUID : team.getSortedMemberList()) {

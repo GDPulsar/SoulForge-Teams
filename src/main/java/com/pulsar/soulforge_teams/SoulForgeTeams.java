@@ -24,6 +24,7 @@ import net.minecraft.network.PacketByteBuf;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.command.ServerCommandSource;
 import net.minecraft.server.network.ServerPlayerEntity;
+import net.minecraft.text.ClickEvent;
 import net.minecraft.text.MutableText;
 import net.minecraft.text.Style;
 import net.minecraft.text.Text;
@@ -61,25 +62,30 @@ public class SoulForgeTeams implements ModInitializer {
 			CommandRegistrationCallback.EVENT.register((dispatcher, registryAccess, environment) -> {
 				registerCommands(dispatcher);
 			});
-		}
 
-		ServerTickEvents.END_SERVER_TICK.register(server -> {
-			PacketByteBuf buf = PacketByteBufs.create();
-			buf.writeVarInt(server.getPlayerManager().getCurrentPlayerCount());
-			for (ServerPlayerEntity player : server.getPlayerManager().getPlayerList()) {
-				buf.writeUuid(player.getUuid());
-				buf.writeFloat(player.getMaxHealth());
-				buf.writeFloat(player.getHealth());
-			}
-			for (ServerPlayerEntity player : server.getPlayerManager().getPlayerList()) {
-				ServerPlayNetworking.send(player, HEALTH_PACKET, buf);
-			}
-			syncTeams(server);
-		});
+			ServerTickEvents.END_SERVER_TICK.register(server -> {
+				PacketByteBuf buf = PacketByteBufs.create();
+				buf.writeVarInt(server.getPlayerManager().getCurrentPlayerCount());
+				for (ServerPlayerEntity player : server.getPlayerManager().getPlayerList()) {
+					buf.writeUuid(player.getUuid());
+					buf.writeFloat(player.getMaxHealth());
+					buf.writeFloat(player.getHealth());
+				}
+				for (ServerPlayerEntity player : server.getPlayerManager().getPlayerList()) {
+					ServerPlayNetworking.send(player, HEALTH_PACKET, buf);
+				}
+				syncTeams(server);
+			});
+		}
+	}
+
+	public static List<Team> getAllTeams(MinecraftServer server) {
+		SoulForgeTeamsData teamData = SoulForgeTeamsData.getData(server);
+		return teamData.TEAMS;
 	}
 
 	public static Team getPlayerTeam(MinecraftServer server, PlayerEntity player) {
-		SoulForgeTeamsData teamData = SoulForgeTeamsData.getServerState(server);
+		SoulForgeTeamsData teamData = SoulForgeTeamsData.getData(server);
 		for (Team team : teamData.TEAMS) {
 			if (team.isTeamMember(player)) {
 				return team;
@@ -89,7 +95,7 @@ public class SoulForgeTeams implements ModInitializer {
 	}
 
 	public static Team getTeamByName(MinecraftServer server, String teamName) {
-		SoulForgeTeamsData teamData = SoulForgeTeamsData.getServerState(server);
+		SoulForgeTeamsData teamData = SoulForgeTeamsData.getData(server);
 		for (Team team : teamData.TEAMS) {
 			if (team.options.teamName.equals(teamName)) {
 				return team;
@@ -99,13 +105,13 @@ public class SoulForgeTeams implements ModInitializer {
 	}
 
 	public static void createNewTeam(MinecraftServer server, Team team) {
-		SoulForgeTeamsData teamData = SoulForgeTeamsData.getServerState(server);
+		SoulForgeTeamsData teamData = SoulForgeTeamsData.getData(server);
 		teamData.TEAMS.add(team);
 		syncTeams(server);
 	}
 
 	public static void deleteTeam(MinecraftServer server, Team team) {
-		SoulForgeTeamsData teamData = SoulForgeTeamsData.getServerState(server);
+		SoulForgeTeamsData teamData = SoulForgeTeamsData.getData(server);
 		for (Team other : List.copyOf(teamData.TEAMS)) {
 			other.declare(team, Team.Relation.NEUTRAL);
 		}
@@ -117,7 +123,7 @@ public class SoulForgeTeams implements ModInitializer {
 	}
 
 	public static void addPlayerToTeam(MinecraftServer server, UUID teamId, PlayerEntity player) {
-		SoulForgeTeamsData teamData = SoulForgeTeamsData.getServerState(server);
+		SoulForgeTeamsData teamData = SoulForgeTeamsData.getData(server);
 		for (Team team : teamData.TEAMS) {
 			if (team.getID().compareTo(teamId) == 0) {
 				Team.TeamChanges changes = team.addMember(player);
@@ -130,7 +136,7 @@ public class SoulForgeTeams implements ModInitializer {
 	}
 
 	public static void addFakePlayerToTeam(MinecraftServer server, UUID teamId) {
-		SoulForgeTeamsData teamData = SoulForgeTeamsData.getServerState(server);
+		SoulForgeTeamsData teamData = SoulForgeTeamsData.getData(server);
 		for (Team team : teamData.TEAMS) {
 			if (team.getID().compareTo(teamId) == 0) {
 				team.addFakeMember();
@@ -145,7 +151,7 @@ public class SoulForgeTeams implements ModInitializer {
 	}
 
 	public static void syncTeams(MinecraftServer server) {
-		SoulForgeTeamsData teamData = SoulForgeTeamsData.getServerState(server);
+		SoulForgeTeamsData teamData = SoulForgeTeamsData.getData(server);
 		PacketByteBuf buf = PacketByteBufs.create();
 		buf.writeVarInt(teamData.TEAMS.size());
 		for (Team team : teamData.TEAMS) {
@@ -197,6 +203,10 @@ public class SoulForgeTeams implements ModInitializer {
 															targetPlayer.sendMessage(Text.translatable("soulforge-teams.not_high_enough_rank"));
 															return 1;
 														}
+														if (isInTeam(server, targetPlayer)) {
+															targetPlayer.sendMessage(Text.translatable("soulforge-teams.cant_invite_already_teamed"));
+															return 1;
+														}
 														INVITES.add(new Pair<>(team, targetPlayer));
 														targetPlayer.sendMessage(Text.translatable("soulforge-teams.received_invite").append(team.options.teamName));
 														player.sendMessage(Text.translatable("soulforge-teams.sent_invite").append(team.options.teamName));
@@ -209,29 +219,77 @@ public class SoulForgeTeams implements ModInitializer {
 										})
 								)
 						)
+						.then(literal("invites")
+								.executes(context -> {
+									ServerPlayerEntity player = context.getSource().getPlayer();
+									MinecraftServer server = context.getSource().getServer();
+									if (player != null && server != null) {
+										List<String> inviteNames = new ArrayList<>();
+										for (Pair<Team, PlayerEntity> invite : INVITES) {
+											if (invite.getRight() == player) {
+												inviteNames.add(invite.getLeft().getOptions().teamName);
+											}
+										}
+										if (inviteNames.isEmpty()) {
+											player.sendMessage(Text.translatable("soulforge-teams.no_invites"));
+										} else {
+											player.sendMessage(Text.translatable("soulforge-teams.invite_list"));
+											for (String teamName : inviteNames) {
+												player.sendMessage(Text.literal(teamName).setStyle(Style.EMPTY.withClickEvent(
+														new ClickEvent(ClickEvent.Action.SUGGEST_COMMAND, "/sfteams accept " + teamName))));
+											}
+										}
+									}
+									return 1;
+								})
+						)
 						.then(literal("accept")
-								.then(argument("team", string())
+								.then(argument("team", greedyString())
+										.suggests(new TeamInviteSuggestionProvider())
+										.executes(context -> {
+											ServerPlayerEntity player = context.getSource().getPlayer();
+											MinecraftServer server = context.getSource().getServer();
+											String teamName = StringArgumentType.getString(context, "team");
+											if (player != null && server != null) {
+												if (!isInTeam(server, player)) {
+													Team team = getTeamByName(server, teamName);
+													if (team != null) {
+														for (Pair<Team, PlayerEntity> invite : INVITES) {
+															if (player.getUuid().compareTo(invite.getRight().getUuid()) == 0) {
+																if (Objects.equals(invite.getLeft().options.teamName, team.options.teamName)) {
+																	addPlayerToTeam(server, invite.getLeft().getID(), player);
+																	return 1;
+																}
+															}
+														}
+													} else {
+														player.sendMessage(Text.translatable("soulforge-teams.team_doesnt_exist"));
+														return 1;
+													}
+												} else {
+													player.sendMessage(Text.translatable("soulforge-teams.already_in_team"));
+													return 1;
+												}
+											}
+											if (player != null) player.sendMessage(Text.translatable("soulforge-teams.no_invites_team").append(teamName));
+											return 1;
+										})
+								)
+						)
+						.then(literal("info")
+								.then(argument("team", greedyString())
+										.suggests(new TeamSuggestionProvider())
 										.executes(context -> {
 											ServerPlayerEntity player = context.getSource().getPlayer();
 											MinecraftServer server = context.getSource().getServer();
 											String teamName = StringArgumentType.getString(context, "team");
 											Team team = getTeamByName(server, teamName);
 											if (player != null && server != null && team != null) {
-												for (Pair<Team, PlayerEntity> invite : INVITES) {
-													if (player.getUuid().compareTo(invite.getRight().getUuid()) == 0) {
-														if (Objects.equals(invite.getLeft().options.teamName, team.options.teamName)) {
-															addPlayerToTeam(server, invite.getLeft().getID(), player);
-															return 1;
-														}
-													}
-												}
+												team.printInfoText(player);
 											}
-											if (player != null) player.sendMessage(Text.translatable("soulforge-teams.no_invites").append(teamName));
 											return 1;
 										})
 								)
-						)
-						.then(literal("info")
 								.executes(context -> {
 									ServerPlayerEntity player = context.getSource().getPlayer();
 									MinecraftServer server = context.getSource().getServer();
@@ -362,7 +420,7 @@ public class SoulForgeTeams implements ModInitializer {
 												Team team = getPlayerTeam(server, player);
 												if (team != null) {
 													Team.Rank rank = team.members.get(player.getUuid());
-													if (rank != Team.Rank.OWNER) {
+													if (rank == Team.Rank.OWNER) {
 														player.sendMessage(Text.translatable("soulforge-teams.cant_leave_as_owner"));
 														return 1;
 													}
@@ -379,10 +437,17 @@ public class SoulForgeTeams implements ModInitializer {
 								.executes(context -> {
 									ServerPlayerEntity player = context.getSource().getPlayer();
 									MinecraftServer server = context.getSource().getServer();
-									Team team = getPlayerTeam(server, player);
 									if (player != null && server != null) {
-										if (team != null) {
-											deleteTeam(server, team);
+										if (isInTeam(server, player)) {
+											Team team = getPlayerTeam(server, player);
+											if (team != null) {
+												Team.Rank rank = team.members.get(player.getUuid());
+												if (rank == Team.Rank.OWNER) {
+													deleteTeam(server, team);
+													player.sendMessage(Text.translatable("soulforge-teams.team_disbanded"));
+													return 1;
+												}
+											}
 										} else {
 											player.sendMessage(Text.translatable("soulforge-teams.not_in_team"));
 										}
@@ -440,6 +505,15 @@ public class SoulForgeTeams implements ModInitializer {
 													return 1;
 												})
 										)
+										.executes(context -> {
+											ServerPlayerEntity player = context.getSource().getPlayer();
+											MinecraftServer server = context.getSource().getServer();
+											Team team = getPlayerTeam(server, player);
+											if (player != null && server != null && team != null) {
+												player.sendMessage(Text.translatable("soulforge-teams.allow_team_pvp").append(String.valueOf(team.options.allowTeamPvP)));
+											}
+											return 1;
+										})
 								)
 								.then(literal("allowOffensiveAllyTargeting")
 										.then(argument("enabled", bool())
@@ -452,7 +526,7 @@ public class SoulForgeTeams implements ModInitializer {
 														Team.Rank rank = team.members.get(player.getUuid());
 														if (rank == Team.Rank.LEADER || rank == Team.Rank.OWNER) {
 															team.options.allowOffensiveAllyTargeting = enabled;
-															player.sendMessage(Text.translatable("soulforge-teams.succesfully_changed_options"));
+															player.sendMessage(Text.translatable("soulforge-teams.successfully_changed_options"));
 														} else {
 															player.sendMessage(Text.translatable("soulforge-teams.not_high_enough_rank"));
 														}
@@ -460,6 +534,15 @@ public class SoulForgeTeams implements ModInitializer {
 													return 1;
 												})
 										)
+										.executes(context -> {
+											ServerPlayerEntity player = context.getSource().getPlayer();
+											MinecraftServer server = context.getSource().getServer();
+											Team team = getPlayerTeam(server, player);
+											if (player != null && server != null && team != null) {
+												player.sendMessage(Text.translatable("soulforge-teams.allow_offensive_ally_targeting").append(String.valueOf(team.options.allowOffensiveAllyTargeting)));
+											}
+											return 1;
+										})
 								)
 								.then(literal("allowDefensiveEnemyTargeting")
 										.then(argument("enabled", bool())
@@ -472,7 +555,7 @@ public class SoulForgeTeams implements ModInitializer {
 														Team.Rank rank = team.members.get(player.getUuid());
 														if (rank == Team.Rank.LEADER || rank == Team.Rank.OWNER) {
 															team.options.allowDefensiveEnemyTargeting = enabled;
-															player.sendMessage(Text.translatable("soulforge-teams.succesfully_changed_options"));
+															player.sendMessage(Text.translatable("soulforge-teams.successfully_changed_options"));
 														} else {
 															player.sendMessage(Text.translatable("soulforge-teams.not_high_enough_rank"));
 														}
@@ -480,6 +563,15 @@ public class SoulForgeTeams implements ModInitializer {
 													return 1;
 												})
 										)
+										.executes(context -> {
+											ServerPlayerEntity player = context.getSource().getPlayer();
+											MinecraftServer server = context.getSource().getServer();
+											Team team = getPlayerTeam(server, player);
+											if (player != null && server != null && team != null) {
+												player.sendMessage(Text.translatable("soulforge-teams.allow_defensive_enemy_targeting").append(String.valueOf(team.options.allowDefensiveEnemyTargeting)));
+											}
+											return 1;
+										})
 								)
 								.then(literal("teamDescription")
 										.then(argument("description", greedyString())
@@ -492,7 +584,7 @@ public class SoulForgeTeams implements ModInitializer {
 														Team.Rank rank = team.members.get(player.getUuid());
 														if (rank == Team.Rank.LEADER || rank == Team.Rank.OWNER) {
 															team.options.teamDescription = description;
-															player.sendMessage(Text.translatable("soulforge-teams.succesfully_changed_options"));
+															player.sendMessage(Text.translatable("soulforge-teams.successfully_changed_options"));
 														} else {
 															player.sendMessage(Text.translatable("soulforge-teams.not_high_enough_rank"));
 														}
@@ -500,6 +592,15 @@ public class SoulForgeTeams implements ModInitializer {
 													return 1;
 												})
 										)
+										.executes(context -> {
+											ServerPlayerEntity player = context.getSource().getPlayer();
+											MinecraftServer server = context.getSource().getServer();
+											Team team = getPlayerTeam(server, player);
+											if (player != null && server != null && team != null) {
+												player.sendMessage(Text.translatable("soulforge-teams.team_description").append(String.valueOf(team.options.teamDescription)));
+											}
+											return 1;
+										})
 								)
 								.then(literal("teamName")
 										.then(argument("name", greedyString())
@@ -512,7 +613,7 @@ public class SoulForgeTeams implements ModInitializer {
 														Team.Rank rank = team.members.get(player.getUuid());
 														if (rank == Team.Rank.OWNER) {
 															team.options.teamName = name;
-															player.sendMessage(Text.translatable("soulforge-teams.succesfully_changed_options"));
+															player.sendMessage(Text.translatable("soulforge-teams.successfully_changed_options"));
 														} else {
 															player.sendMessage(Text.translatable("soulforge-teams.not_high_enough_rank"));
 														}
@@ -520,6 +621,15 @@ public class SoulForgeTeams implements ModInitializer {
 													return 1;
 												})
 										)
+										.executes(context -> {
+											ServerPlayerEntity player = context.getSource().getPlayer();
+											MinecraftServer server = context.getSource().getServer();
+											Team team = getPlayerTeam(server, player);
+											if (player != null && server != null && team != null) {
+												player.sendMessage(Text.translatable("soulforge-teams.team_name").append(String.valueOf(team.options.teamName)));
+											}
+											return 1;
+										})
 								)
 						)
 		);
@@ -531,6 +641,32 @@ public class SoulForgeTeams implements ModInitializer {
 			if (CommandSource.shouldSuggest(builder.getRemaining(), "Ally")) builder.suggest("Ally");
 			if (CommandSource.shouldSuggest(builder.getRemaining(), "Neutral")) builder.suggest("Neutral");
 			if (CommandSource.shouldSuggest(builder.getRemaining(), "Enemy")) builder.suggest("Enemy");
+			return builder.buildFuture();
+		}
+	}
+
+	public static class TeamSuggestionProvider implements SuggestionProvider<ServerCommandSource> {
+		@Override
+		public CompletableFuture<Suggestions> getSuggestions(CommandContext<ServerCommandSource> context, SuggestionsBuilder builder) throws CommandSyntaxException {
+			MinecraftServer server = context.getSource().getServer();
+			for (Team team : getAllTeams(server)) {
+				String name = team.options.teamName;
+				if (CommandSource.shouldSuggest(builder.getRemaining(), name)) builder.suggest(name);
+			}
+			return builder.buildFuture();
+		}
+	}
+
+	public static class TeamInviteSuggestionProvider implements SuggestionProvider<ServerCommandSource> {
+		@Override
+		public CompletableFuture<Suggestions> getSuggestions(CommandContext<ServerCommandSource> context, SuggestionsBuilder builder) throws CommandSyntaxException {
+			ServerPlayerEntity player = context.getSource().getPlayer();
+			for (Pair<Team, PlayerEntity> invite : INVITES) {
+				if (invite.getRight() == player) {
+					String name = invite.getLeft().options.teamName;
+					if (CommandSource.shouldSuggest(builder.getRemaining(), name)) builder.suggest(name);
+				}
+			}
 			return builder.buildFuture();
 		}
 	}
@@ -869,9 +1005,9 @@ public class SoulForgeTeams implements ModInitializer {
 		}
 
 		public enum Rank {
-			OWNER(2),
+			MEMBER(0),
 			LEADER(1),
-			MEMBER(0);
+			OWNER(2);
 
 			final int index;
 			Rank(int index) {
